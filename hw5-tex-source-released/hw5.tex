@@ -1,0 +1,205 @@
+\documentclass[11pt]{article}
+
+\usepackage{amsmath}
+\usepackage[margin=1in]{geometry}
+\usepackage{paralist}
+\usepackage{hyperref}
+
+\usepackage{minted}
+\newcommand{\mnt}[1]{{\small\mintinline{java}{#1}}}
+
+\usepackage{xcolor}
+\newcommand{\red}[1]{\textbf{\color{red} #1}}
+
+\newcommand{\eq}{\equiv}
+\newcommand{\kstar}{^{\textstyle *}}
+
+\begin{document}
+
+\title{COMP 418/518: Homework 5 \\[1ex] \large [Weight of homework: 25\% of the final grade]}
+\author{Authors (fill in your names here)}
+\date{released on April 9, 2025}
+
+\maketitle
+
+
+\paragraph{Instructions:}
+
+For this homework, you should work in groups of 3--4 people (i.e., the groups that you have formed). Only one member of the group should submit on Canvas. Specify in your submission the members of your group (name and NetID). The submission must be typed in LaTeX using the provided template. You should provide pseudocode for the algorithms that you describe.
+
+\paragraph{Grading:}
+
+The homework will be graded based on correctness, completeness, and the quality of the provided solutions.
+
+\paragraph{General Information and Context:}
+
+This is the final assignment for the course. We will explore the application of dataflow programming for IoT applications.
+
+In the first part, we will see that relational algebra (as known from database system query languages) can be adapted to the streaming setting and implemented using dataflow techniques. This implementation can form the basis of a fast and lightweight in-memory data processing engine for real-time IoT data.
+
+In the second part, we will use ToyDSL to analyze ECG signal. The analysis will include the detection of peaks (i.e., heartbeats), the calculation of the heart rate, and the computation of various measures of heart rate variability (HRV). The considered algorithms are very lightweight so that they can be used in extremely resource-constrained settings, e.g., in wearable health devices and implantable medical devices.
+
+The code that will be produced in this assignment is appropriate for deployment on devices of the same class as the Raspberry Pi and, more generally, single-board computers. These devices can run an operating system and the JVM.
+
+
+\section{Streaming Relational Algebra [50 points]}
+
+\begin{enumerate}[(A)]
+\item
+\textbf{[40 points]}
+Download the Java project form Canvas. Fill in the code for the streaming relational algebra operators. Your implementation should pass all included unit tests. Answer the following questions:
+\begin{enumerate}[(i)]
+\item
+Can we implement \texttt{EquiJoin} using \texttt{ThetaJoin}? If yes, how?
+\item
+Is it a good idea to include both \texttt{EquiJoin} and \texttt{ThetaJoin} in a DSL for real-time data processing? Explain.
+\end{enumerate}
+\item
+\textbf{[10 points]}
+The implementations of streaming operators that we have seen can be understood as transformation of input histories (sequences of input items) to output histories (sequences of output items). We will explore now when we can view the streaming data as multisets (bags). (Treating collections of data items as multisets is very common in query languages for database systems.)
+
+We say that two sequences $x, y \in A\kstar$ are \emph{bag-equivalent}, and we write $x \eq y$, if $y$ is a permutation of $x$ (i.e., $y$ results from $x$ by changing the order of the elements).
+%
+More formally, a permutation of a sequence $a_1 a_2 \ldots a_n$ is a sequence $a_{\sigma(1)} a_{\sigma(2)} \ldots a_{\sigma(n)}$, where $[n] = \{ 1, 2, \ldots, n \}$ and $\sigma: [n] \to [n]$ is a bijection.
+%
+For example, $aabbb \eq ababb \eq abbab \eq abbba \eq babba \eq bbaba \eq bbbaa$ and $aabbb \not\eq aabb$. Intuitively, two sequences are bag-equivalent if they represent the same multiset.
+
+Let $f: A\kstar \to B\kstar$ be a monotone function, which could be the cumulative denotation of some streaming algorithm. We say that $f$ is \emph{bag-consistent} if it satisfies the following property:
+\[
+  x \eq y \implies f(x) \eq f(y)
+  \text{ for all $x, y \in A\kstar$}.
+\]
+%
+Intuitively, this says that if $x$ and $y$ represent the same multiset, then $f(x)$ and $f(y)$ represent the same multiset.
+%
+We also say that an operator (implementation) is \emph{bag-consistent} if its cumulative denotation if bag-consistent.
+\begin{enumerate}[(i)]
+\item
+Show that $\eq$ is an equivalence relation.
+\item
+Is the \mnt{Map} operator (Fig.~\ref{fig:operators}) bag-consistent? Justify your answer.
+\item
+Is the \mnt{Filter} operator (Fig.~\ref{fig:operators}) bag-consistent? Justify your answer.
+\item
+Does serial composition preserve bag-consistency? Justify your answer.
+\item
+Describe an operator that is not bag-consistent.
+\end{enumerate}
+\end{enumerate}
+
+\begin{figure}[t]
+\scriptsize\centering
+\begin{minipage}[t]{0.46\textwidth}
+\begin{minted}[frame=single]{java}
+public class Map<A,B> implements Operator<A,B> {
+
+	private final Function<A,B> op;
+
+	public Map(Function<A,B> op) {
+		this.op = op;
+	}
+
+	public void start(Sink<B> sink) {
+		// nothing to do
+	}
+
+	public void next(A item, Sink<B> sink) {
+		sink.next(op.apply(item));
+	}
+}
+\end{minted}
+\end{minipage}
+\quad
+\begin{minipage}[t]{0.46\textwidth}
+\begin{minted}[frame=single]{java}
+public class Filter<A> implements Operator<A,A> {
+
+	private final Predicate<A> pred;
+
+	public Filter(Predicate<A> pred) {
+		this.pred = pred;
+	}
+
+	public void start(Sink<A> sink) {
+		// nothing to do
+	}
+
+	public void next(A item, Sink<A> sink) {
+		if (pred.test(item)) {
+			sink.next(item);
+		}
+	}
+}
+\end{minted}
+\end{minipage}
+\caption{The \mnt{Map} and \mnt{Filter} operators.}
+\label{fig:operators}
+\end{figure}
+
+\subsection*{Answers for Part (A)}
+
+\red{Fill me in.}
+
+\subsection*{Answers for Part (B)}
+
+\red{Fill me in.}
+
+
+\section{Real-time Analysis of ECG Signal [100 points]}
+
+Download the Java project form Canvas. Fill in the code for ECG analysis. Your implementation should pass all included unit tests. If there is anything that you would like to clarify, please do so below.
+
+\subsection*{Remarks}
+
+\red{Fill me in (if there is anything to clarify).}
+
+
+\section{Embedded Programming for the ``Things'' of the IoT [100 points]}
+
+\begin{enumerate}[(A)]
+\item
+\textbf{[10 points]}
+Is it possible to port the Java-based ECG analysis of the previous problem to a microcontroller (MCU) such as the STM32F407 (described in the lectures)? Would it be possible to use an even less capable MCU? Discuss the issues that have to be resolved, what the key considerations are, and if/how you should modify the implementation. Keep in mind that essentially every MCU can be programmed using the C programming language.
+
+\item
+\textbf{[40 points]}
+Suppose that you are developing an IoT application using the ATmega328P (\url{https://www.microchip.com/en-us/product/ATmega328P}). This is the MCU used in the Arduino Uno board. Recall that the ATmega328P has only 2 KB (i.e., 2048 bytes) of SRAM in total, which severely restricts the computations we can run. The application that you are developing requires capturing the signal from a sensor using the analog-to-digital conversion (ADC) module. The resolution of the ADC is 10 bits, which means that the captured values are integers in the range $\{ 0, 1, \ldots, 1023 \}$. Assume that the signal is sampled at a frequency of 1000 Hz.
+
+Using this sensor signal as the input stream, is it possible to compute the average over a sliding window of size 1 sec using \underline{up to 900 bytes of SRAM}? We want the average to be re-computed whenever a new sample is generated, which means that the output stream should also have a rate of 1000 Hz. We allow the output to have \underline{up to 5\% one-sided relative error}. That is, if $y$ is the exact output and $\hat y$ is the output of the algorithm, we want the following to hold:
+\[
+  \hat y \leq y
+  \quad\text{and}\quad
+  \cfrac{y - \hat y}{y} \leq 0.05.
+\]
+Because of constraints of the ATmega328P, we \underline{cannot use floating-point arithmetic} in our implementation. Only integer calculations are allowed\footnote{The AVR instruction set manual describes the instructions that are supported by the CPU (\url{https://ww1.microchip.com/downloads/en/DeviceDoc/AVR-InstructionSet-Manual-DS40002198.pdf}).}. For this reason, the output $\hat y$ (average) should be represented using two non-negative integers $\hat y_1, \hat y_2$ of type \mnt{uint16_t}, where $\hat y = \hat y_1 + (\hat y_2 / 1000)$ and $0 \leq \hat y_2 < 1000$.
+
+Give a detailed explanation of your answer. If you present any algorithms, provide detailed pseudocode and explain exactly how much SRAM is needed.
+
+\item
+\textbf{[50 points]}
+You want to develop a \textbf{\em streaming compression/decompression scheme} for univariate time series data that arise in IoT applications. Both compression and decompression should be computationally lightweight so that they can be deployed on resource-constrained IoT devices with weak MCUs. The approach that you will implement (see Java code on Canvas) consists of three steps: (1) delta encoding, (2) zigzag encoding, and (3) bit packing of small blocks of values (e.g., 10 elements per block) into compressed byte-aligned messages. Read the paper \cite{BlalockMG2018Sprintz}, which describes a more complex compression/decompression scheme.
+\begin{enumerate}[(i)]
+\item
+Fill in the Java code for compression/decompression. Your implementation should pass all included unit tests. We expect each group to implement a slightly different variant, as we are allowing flexibility in the design of the compression scheme. For simplicity, we assume that we deal only with 8-bit univariate time series (e.g., single-channel signals generated by an 8-bit ADC). Explain your approach in detail.
+\item
+Is it possible to run your (de)compressor on the STM32F407 and ATmega328P MCUs? How much SRAM would a low-level implementation of your (de)compressor (e.g., in C or assembly) require?
+\end{enumerate}
+\end{enumerate}
+
+\subsection*{Answers for Part (A)}
+
+\red{Fill me in.}
+
+\subsection*{Answers for Part (B)}
+
+\red{Fill me in.}
+
+\subsection*{Answers for Part (C)}
+
+\red{Fill me in.}
+
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
