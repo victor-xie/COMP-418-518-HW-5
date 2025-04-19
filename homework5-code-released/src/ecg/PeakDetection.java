@@ -1,6 +1,7 @@
 package ecg;
 
 import dsl.S;
+import utils.Pair;
 import dsl.Q;
 import dsl.Query;
 
@@ -18,7 +19,20 @@ public class PeakDetection {
 		// adjust >> smooth >> deriv >> length
 
 		// TODO
-		return null;
+		return Q.pipeline(
+		// Step 1: Adjust — x[n] = raw[n] - 1024
+		Q.map(v -> (double)(v - 1024)),
+
+		// Step 2: Smooth — y[n] = avg over 5 samples (centered)
+		Q.sWindowNaive(5, 0.0, (sum, x) -> sum + x),
+		Q.map(sum -> sum / 5.0),
+
+		// Step 3: Deriv — central difference
+		Q.sWindow2((a, b) -> (b - a) / 2.0),
+
+		// Step 4: Length — curve length over 2w+1 = 41
+		Q.sWindowNaive(41, 0.0, (s, d) -> s + Math.sqrt(1 + d * d))
+	);
 	}
 
 	// In order to detect peaks we need both the raw (or adjusted)
@@ -27,7 +41,21 @@ public class PeakDetection {
 
 	public static Query<Integer,Long> qPeaks() {
 		// TODO
-		return null;
+		return Q.pipeline(
+		// Step 1: Compute curve length l[n] from raw ECG
+		Q.parallel(
+			qLength(), // Left: l[n] from raw Integer
+			Q.pipeline(
+				Q.scan(Pair.from(0L, 0), (pair, v) -> Pair.from(pair.getLeft() + 1, v)),
+				Q.map(p -> new VT(p.getRight(), p.getLeft() - 1)) // Right: VT(v, ts)
+			),
+			// Merge l and VT into VTL
+			(l, vt) -> vt.extendl(l)
+		),
+
+		// Step 2: Run decision rule
+		new Detect()
+	);
 	}
 
 	public static void main(String[] args) {

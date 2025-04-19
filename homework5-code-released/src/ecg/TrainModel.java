@@ -1,6 +1,7 @@
 package ecg;
 
 import dsl.S;
+import utils.Pair;
 import dsl.Q;
 import dsl.Query;
 
@@ -10,7 +11,18 @@ public class TrainModel {
 	public static Query<Integer,Double> qLengthAvg() {
 		// TODO
 		// Hint: Use PeakDetection.qLength()
-		return null;
+		return Q.pipeline(
+		// Step 1: Compute curve length stream
+		PeakDetection.qLength(),
+
+		// Step 2: Fold to compute (sum, count)
+		Q.fold(Pair.from(0.0, 0), (acc, x) ->
+			Pair.from(acc.getLeft() + x, acc.getRight() + 1)
+		),
+
+		// Step 3: Map to 2 × (sum / count)
+		Q.map(p -> 2.0 * (p.getLeft() / p.getRight()))
+	);
 	}
 
 	public static void main(String[] args) {
