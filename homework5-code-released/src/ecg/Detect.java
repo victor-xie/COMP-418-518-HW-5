@@ -34,13 +34,14 @@ public class Detect implements Query<VTL,Long> {
 			TrainModel.qLengthAvg(),
 			sink
 		);
-		THRESHOLD = sink.list.get(0);  
+		THRESHOLD = 2 * sink.list.get(0);  
 	}
 
 	// Internal state
 	private List<VTL> buffer;
 	private int cooldown;
 	private boolean collecting;
+	private int skip = 0;
 
 	public Detect() {
 		// TODO
@@ -68,12 +69,17 @@ public class Detect implements Query<VTL,Long> {
 			if (item.l > THRESHOLD) {
 				buffer.clear();
 				collecting = true;
+				skip = 6;
 				return;  
 			} else {
 				return;
 			}
 		}
 
+		if (skip > 0) {
+			skip--;
+			return;
+		}
 		// Step 3: Collect 40 samples
 		buffer.add(item);
 
