@@ -1,6 +1,7 @@
 package ecg;
 
 import dsl.S;
+import utils.Pair;
 import dsl.Q;
 import dsl.Query;
 
@@ -10,35 +11,53 @@ import dsl.Query;
 public class HeartRate {
 
 	// RR interval length (in milliseconds)
-	public static Query<Integer,Double> qIntervals() {
+	public static Query<Integer, Double> qIntervals() {
 		// TODO
-		return null;
+		return Q.pipeline(
+				PeakDetection.qPeaks(),
+				Q.sWindow2((a, b) -> (b - a) * (1000.0 / 360.0)));
 	}
 
 	// Average heart rate (over entire signal) in bpm.
-	public static Query<Integer,Double> qHeartRateAvg() {
+	public static Query<Integer, Double> qHeartRateAvg() {
 		// TODO
-		return null;
+		return Q.pipeline(
+				qIntervals(),
+				Q.map(rr -> 60000.0 / rr),
+				Q.foldAvg());
 	}
 
 	// Standard deviation of NN interval length (over the entire signal)
 	// in milliseconds.
-	public static Query<Integer,Double> qSDNN() {
+	public static Query<Integer, Double> qSDNN() {
 		// TODO
-		return null;
+		return Q.pipeline(
+				qIntervals(),
+				Q.foldStdev());
 	}
 
 	// RMSSD measure (over the entire signal) in milliseconds.
-	public static Query<Integer,Double> qRMSSD() {
+	public static Query<Integer, Double> qRMSSD() {
 		// TODO
-		return null;
+		return Q.pipeline(
+				qIntervals(),
+				Q.sWindow2((a, b) -> (b - a) * (b - a)),
+				Q.foldAvg(),
+				Q.map(Math::sqrt));
 	}
 
 	// Proportion (in %) derived by dividing NN50 by the total number
 	// of NN intervals (calculated over the entire signal).
-	public static Query<Integer,Double> qPNN50() {
+	public static Query<Integer, Double> qPNN50() {
 		// TODO
-		return null;
+		return Q.pipeline(
+				qIntervals(),
+				Q.sWindow2((a, b) -> Math.abs(b - a)),
+				Q.fold(Pair.from(0.0, 0.0), (pair, diff) -> Pair.from(
+						pair.getLeft() + (diff >= 50.0 ? 1 : 0), // count ≥ 50
+						pair.getRight() + 1 // total count
+				)),
+				Q.map(p -> 100.0 * p.getLeft() / p.getRight()));
 	}
 
 	public static void main(String[] args) {
