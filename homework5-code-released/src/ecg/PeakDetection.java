@@ -50,3 +50,21 @@ public class PeakDetection {
 				Q.map(p -> new VT(p.getRight(), p.getLeft() - 1)) // Right: VT(v, ts)
 			),
 			// Merge l and VT into VTL
+			(l, vt) -> vt.extendl(l)
+		),
+
+		// Step 2: Run decision rule
+		new Detect()
+	);
+	}
+
+	public static void main(String[] args) {
+		System.out.println("****************************************");
+		System.out.println("***** Algorithm for Peak Detection *****");
+		System.out.println("****************************************");
+		System.out.println();
+
+		Q.execute(Data.ecgStream("100.csv"), qPeaks(), S.printer());
+	}
+
+}

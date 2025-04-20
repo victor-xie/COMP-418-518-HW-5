@@ -25,4 +25,13 @@ public class TrainModel {
 	);
 	}
 
-	public static void main(String[] arg
+	public static void main(String[] args) {
+		System.out.println("***********************************************");
+		System.out.println("***** Algorithm for finding the threshold *****");
+		System.out.println("***********************************************");
+		System.out.println();
+
+		Q.execute(Data.ecgStream("100-all.csv"), qLengthAvg(), S.printer());
+	}
+
+}

@@ -34,4 +34,72 @@ public class Detect implements Query<VTL,Long> {
 			TrainModel.qLengthAvg(),
 			sink
 		);
-		T
+		THRESHOLD = sink.list.get(0);  
+	}
+
+	// Internal state
+	private List<VTL> buffer;
+	private int cooldown;
+	private boolean collecting;
+
+	public Detect() {
+		// TODO
+	}
+
+	@Override
+	public void start(Sink<Long> sink) {
+		// TODO
+		buffer = new LinkedList<>();
+		cooldown = 0;
+		collecting = false;
+	}
+
+	@Override
+	public void next(VTL item, Sink<Long> sink) {
+		// TODO
+		// Step 1: Suppress during cooldown
+		if (cooldown > 0) {
+			cooldown--;
+			return;
+		}
+
+		// Step 2: Start collecting if triggered by threshold
+		if (!collecting) {
+			if (item.l > THRESHOLD) {
+				buffer.clear();
+				collecting = true;
+				return;  
+			} else {
+				return;
+			}
+		}
+
+		// Step 3: Collect 40 samples
+		buffer.add(item);
+
+		if (buffer.size() >= 40) {
+			// Step 4: Find max v in the buffer
+			VTL peak = buffer.get(0);
+			for (VTL vtl : buffer) {
+				if (vtl.v >= peak.v) {
+					peak = vtl;
+				}
+			}
+
+			// Step 5: Emit timestamp of max
+			sink.next(peak.ts);
+
+			// Step 6: Reset
+			cooldown = 72;
+			collecting = false;
+			buffer.clear();
+		}
+	}
+
+	@Override
+	public void end(Sink<Long> sink) {
+		// TODO
+		sink.end();
+	}
+	
+}
