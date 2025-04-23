@@ -52,4 +52,27 @@ public class PeakDetection {
 						qLength(), // l[n] curve
  						Q.pipeline(
 								Q.ignore(23), // The first 23 x values must be ignored because they have no corresponding l
-								// Give each raw x[n] value (here "
+								// Give each raw x[n] value (here "v") a timestamp
+								// ts starts from 23 because the first 23 x vals are needed to generate l[0]
+								Q.scan(Pair.from(23, 0), (pair, v) -> Pair.from(pair.getLeft() + 1, v)),
+								// Map to a VT object which holds each raw value with its ts
+								// Make the timestamps 0-indexed
+								Q.map(p -> new VT(p.getRight(), p.getLeft() - 1)) 
+						),
+						// Zip the l value into vt and make a VTL object
+						(l, vt) -> vt.extendl(l)),
+
+				// Pass the stream of VTL objects into the decision rule and get the peaks
+				new Detect());
+	}
+
+	public static void main(String[] args) {
+		System.out.println("****************************************");
+		System.out.println("***** Algorithm for Peak Detection *****");
+		System.out.println("****************************************");
+		System.out.println();
+
+		Q.execute(Data.ecgStream("100.csv"), qPeaks(), S.printer());
+	}
+
+}

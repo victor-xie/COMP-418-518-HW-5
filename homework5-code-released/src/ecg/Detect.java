@@ -91,4 +91,17 @@ public class Detect implements Query<VTL, Long> {
 			// Return ts of peak
 			sink.next(peak.ts);
 
-			// Go on c
+			// Go on cooldown, stop collecting samples, and clear samples
+			cooldown = 72;
+			sampling = false;
+			buffer.clear();
+		}
+	}
+
+	@Override
+	public void end(Sink<Long> sink) {
+		// TODO
+		sink.end();
+	}
+
+}
