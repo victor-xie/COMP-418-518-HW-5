@@ -8,21 +8,19 @@ import utils.Pair;
 public class TrainModel {
 
 	// The average value of the signal l[n] over the entire input.
-	public static Query<Integer,Double> qLengthAvg() {
+	public static Query<Integer, Double> qLengthAvg() {
 		// TODO
 		// Hint: Use PeakDetection.qLength()
 		return Q.pipeline(
-		// Step 1: Compute curve length stream
-		PeakDetection.qLength(),
+				// Curve Length l[n]
+				PeakDetection.qLength(),
 
-		// Step 2: Fold to compute (sum, count)
-		Q.fold(Pair.from(0.0, 0), (acc, x) ->
-			Pair.from(acc.getLeft() + x, acc.getRight() + 1)
-		),
+				// Get the sum of the signal and the count of entries
+				Q.fold(Pair.from(0.0, 0),
+						(acc, x) -> Pair.from(acc.getLeft() + x, acc.getRight() + 1)),
 
-		// Step 3: Map to (sum / count)
-		Q.map(p -> (p.getLeft() / p.getRight()))
-	);
+				// Calculate average
+				Q.map(p -> (p.getLeft() / p.getRight())));
 	}
 
 	public static void main(String[] args) {

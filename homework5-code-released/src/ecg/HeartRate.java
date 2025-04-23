@@ -41,7 +41,7 @@ public class HeartRate {
 		// TODO
 		return Q.pipeline(
 				qIntervals(),
-				Q.sWindow2((a, b) -> (b - a) * (b - a)),
+				Q.sWindow2((x, y) -> (y - x) * (y - x)),
 				Q.foldAvg(),
 				Q.map(Math::sqrt));
 	}
@@ -52,10 +52,10 @@ public class HeartRate {
 		// TODO
 		return Q.pipeline(
 				qIntervals(),
-				Q.sWindow2((a, b) -> Math.abs(b - a)),
+				Q.sWindow2((x, y) -> Math.abs(y - x)),
 				Q.fold(Pair.from(0.0, 0.0), (pair, diff) -> Pair.from(
-						pair.getLeft() + (diff >= 50.0 ? 1 : 0), // count ≥ 50
-						pair.getRight() + 1 // total count
+						pair.getLeft() + (diff >= 50.0 ? 1 : 0), 
+						pair.getRight() + 1 
 				)),
 				Q.map(p -> 100.0 * p.getLeft() / p.getRight()));
 	}

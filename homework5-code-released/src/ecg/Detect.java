@@ -1,12 +1,11 @@
 package ecg;
 
-import java.util.LinkedList;
-import java.util.List;
-
 import dsl.Q;
 import dsl.Query;
 import dsl.SCollector;
 import dsl.Sink;
+import java.util.LinkedList;
+import java.util.List;
 
 // The detection algorithm (decision rule) that we described in class
 // (or your own slight variant of it).
@@ -20,28 +19,29 @@ import dsl.Sink;
 //
 // OUTPUT: The timestamp of each peak.
 
-public class Detect implements Query<VTL,Long> {
+public class Detect implements Query<VTL, Long> {
 
 	// Choose this to be two times the average length
 	// over the entire signal.
 	private static final double THRESHOLD; // TODO
 
 	// TODO
+	// Initialize THRESHOLD to 2 * avg(l[n]) using TrainModel
 	static {
 		SCollector<Double> sink = new SCollector<>();
 		Q.execute(
-			Data.ecgStream("100-all.csv"),
-			TrainModel.qLengthAvg(),
-			sink
-		);
-		THRESHOLD = 2 * sink.list.get(0);  
+				Data.ecgStream("100-all.csv"),
+				TrainModel.qLengthAvg(),
+				sink);
+		THRESHOLD = 2 * sink.list.get(0);
 	}
 
-	// Internal state
+	// Stores the 40 samples to find a peak
 	private List<VTL> buffer;
+	// Don't look for threshold 72 samples after finding a peak
 	private int cooldown;
-	private boolean collecting;
-	private int skip = 0;
+	// Tracks whether we are actively searching for a peak (threshold is crossed)
+	private boolean sampling;
 
 	public Detect() {
 		// TODO
@@ -52,39 +52,35 @@ public class Detect implements Query<VTL,Long> {
 		// TODO
 		buffer = new LinkedList<>();
 		cooldown = 0;
-		collecting = false;
+		sampling = false;
 	}
 
 	@Override
 	public void next(VTL item, Sink<Long> sink) {
 		// TODO
-		// Step 1: Suppress during cooldown
+		// Still on cooldown after last peak
 		if (cooldown > 0) {
 			cooldown--;
 			return;
 		}
 
-		// Step 2: Start collecting if triggered by threshold
-		if (!collecting) {
+		// Not yet looking for peak; check threshold
+		if (!sampling) {
+			// Begin looking for peak starting with the next sample
 			if (item.l > THRESHOLD) {
 				buffer.clear();
-				collecting = true;
-				skip = 6;
-				return;  
+				sampling = true;
+				return;
 			} else {
 				return;
 			}
 		}
 
-		if (skip > 0) {
-			skip--;
-			return;
-		}
-		// Step 3: Collect 40 samples
+		// Collect 40 samples
 		buffer.add(item);
 
 		if (buffer.size() >= 40) {
-			// Step 4: Find max v in the buffer
+			// The sample with the max v value is the peak
 			VTL peak = buffer.get(0);
 			for (VTL vtl : buffer) {
 				if (vtl.v >= peak.v) {
@@ -92,20 +88,7 @@ public class Detect implements Query<VTL,Long> {
 				}
 			}
 
-			// Step 5: Emit timestamp of max
+			// Return ts of peak
 			sink.next(peak.ts);
 
-			// Step 6: Reset
-			cooldown = 72;
-			collecting = false;
-			buffer.clear();
-		}
-	}
-
-	@Override
-	public void end(Sink<Long> sink) {
-		// TODO
-		sink.end();
-	}
-	
-}
+			// Go on c
