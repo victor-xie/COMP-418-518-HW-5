@@ -1,9 +1,9 @@
 package ecg;
 
-import dsl.S;
-import utils.Pair;
 import dsl.Q;
 import dsl.Query;
+import dsl.S;
+import utils.Pair;
 
 public class TrainModel {
 
@@ -20,8 +20,8 @@ public class TrainModel {
 			Pair.from(acc.getLeft() + x, acc.getRight() + 1)
 		),
 
-		// Step 3: Map to 2 × (sum / count)
-		Q.map(p -> 2.0 * (p.getLeft() / p.getRight()))
+		// Step 3: Map to (sum / count)
+		Q.map(p -> (p.getLeft() / p.getRight()))
 	);
 	}
 

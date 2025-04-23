@@ -1,9 +1,9 @@
 package ecg;
 
-import dsl.S;
-import utils.Pair;
 import dsl.Q;
 import dsl.Query;
+import dsl.S;
+import utils.Pair;
 
 public class PeakDetection {
 
@@ -28,7 +28,7 @@ public class PeakDetection {
 		Q.map(sum -> sum / 5.0),
 
 		// Step 3: Deriv — central difference
-		Q.sWindow2((a, b) -> (b - a) / 2.0),
+		Q.sWindow3((a, b, c) -> (c - a) / 2.0),
 
 		// Step 4: Length — curve length over 2w+1 = 41
 		Q.sWindowNaive(41, 0.0, (s, d) -> s + Math.sqrt(1 + d * d))
