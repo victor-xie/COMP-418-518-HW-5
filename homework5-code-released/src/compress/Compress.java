@@ -1,11 +1,9 @@
 package compress;
 
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Queue;
-
 import dsl.*;
 import ecg.Data;
+import java.util.Iterator;
+import java.util.LinkedList;
 
 public class Compress {
 
@@ -24,6 +22,8 @@ public class Compress {
 
 			@Override
 			public void next(Integer item, Sink<Integer> sink) {
+				// First item will be original
+				// All subsequent items will be diffs
 				int delta = item - prev;
 				sink.next(delta);
 				prev = item;
@@ -49,6 +49,8 @@ public class Compress {
 
 			@Override
 			public void next(Integer item, Sink<Integer> sink) {
+				// First value will be the same
+				// Others will be reconstructed by sum
 				int value = item + prev;
 				sink.next(value);
 				prev = value;
@@ -79,7 +81,7 @@ public class Compress {
 	public static Query<Integer, Integer> pack() {
 		// TODO
 		return new Query<>() {
-			Queue<Integer> block = new LinkedList<>();
+			private final LinkedList<Integer> block = new LinkedList<>();
 
 			@Override
 			public void start(Sink<Integer> sink) {
@@ -91,25 +93,26 @@ public class Compress {
 				block.add(item);
 				if (block.size() == BLOCK_SIZE) {
 					int max = 0;
-					for (int val : block) max = Math.max(max, val);
-					int bits = 32 - Integer.numberOfLeadingZeros(max);
-					if (bits == 0) bits = 1;
+					for (int v : block) max |= v;
+					int bitWidth = 32 - Integer.numberOfLeadingZeros(max);
+					if (bitWidth == 0) bitWidth = 1;
 
-					sink.next(bits); // header: bit width
+					sink.next(bitWidth); // emit bit width
 
 					int acc = 0;
 					int accLen = 0;
-					for (int val : block) {
-						acc |= (val << accLen);
-						accLen += bits;
+					for (int v : block) {
+						acc = (acc << bitWidth) | v;
+						accLen += bitWidth;
 						while (accLen >= 8) {
-							sink.next(acc & 0xFF);
-							acc >>>= 8;
+							int out = (acc >> (accLen - 8)) & 0xFF;
+							sink.next(out);
 							accLen -= 8;
 						}
 					}
 					if (accLen > 0) {
-						sink.next(acc & 0xFF);
+						int out = (acc << (8 - accLen)) & 0xFF;
+						sink.next(out);
 					}
 					block.clear();
 				}
@@ -120,51 +123,41 @@ public class Compress {
 				sink.end();
 			}
 		};
-
 	}
 
-	// Query for unpacking: compressed message -> recoverse elements that were
+	// Query for unpacking: compressed message -> recovers elements that were
 	// packed
 	public static Query<Integer, Integer> unpack() {
 		// TODO
 		return new Query<>() {
-			private int bitWidth = 0;
-			private final LinkedList<Integer> buffer = new LinkedList<>();
-			private int acc = 0;
-			private int accLen = 0;
-			private int valuesDecoded = 0;
+			private int bitWidth;
+			private int acc, accLen, count;
 
 			@Override
 			public void start(Sink<Integer> sink) {
 				bitWidth = 0;
-				acc = 0;
-				accLen = 0;
-				valuesDecoded = 0;
-				buffer.clear();
+				acc = accLen = count = 0;
 			}
 
 			@Override
 			public void next(Integer item, Sink<Integer> sink) {
 				if (bitWidth == 0) {
 					bitWidth = item;
-					valuesDecoded = 0;
-					acc = 0;
-					accLen = 0;
-				} else {
-					acc |= (item << accLen);
-					accLen += 8;
-					while (accLen >= bitWidth && valuesDecoded < BLOCK_SIZE) {
-						int val = acc & ((1 << bitWidth) - 1);
-						sink.next(val);
-						acc >>>= bitWidth;
-						accLen -= bitWidth;
-						valuesDecoded++;
-					}
-					if (valuesDecoded == BLOCK_SIZE) {
-						bitWidth = 0;
-						acc = 0;
-						accLen = 0;
-					}
+					acc = accLen = count = 0;
+					return;
+				}
+
+				acc = (acc << 8) | item;
+				accLen += 8;
+
+				while (accLen >= bitWidth && count < BLOCK_SIZE) {
+					int shift = accLen - bitWidth;
+					int val = (acc >> shift) & ((1 << bitWidth) - 1);
+					sink.next(val);
+					accLen -= bitWidth;
+					acc &= (1 << accLen) - 1;
+					count++;
+					if (count == BLOCK_SIZE) bitWidth = 0;
 				}
 			}
 
