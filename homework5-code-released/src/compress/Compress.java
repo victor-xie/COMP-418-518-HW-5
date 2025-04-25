@@ -85,61 +85,77 @@ public class Compress {
 		// TODO
 		return new Query<>() {
 			private final List<Integer> block = new ArrayList<>(BLOCK_SIZE);
-		
+
 			@Override
 			public void start(Sink<Integer> sink) {
-			  block.clear();
+				block.clear();
 			}
-		
+
 			@Override
 			public void next(Integer item, Sink<Integer> sink) {
-			  block.add(item);
-			  if (block.size() == BLOCK_SIZE) {
-				// 1) bitWidth = max bits needed among block
-				int orAll = 0;
-				for (int v : block) orAll |= v;
-				int bitWidth = 32 - Integer.numberOfLeadingZeros(orAll);
-				if (bitWidth == 0) bitWidth = 1;
-				// we'll store (bitWidth−1) in 3 bits [0..7]  
-		
-				// 2) build a big‐endian bit accumulator
-				long acc = 0;
-				int accLen = 0;
-		
-				// 2a) push header = (bitWidth−1) in 3 bits
-				int header = (bitWidth - 1) & 0x7;
-				acc = header;
-				accLen = 3;
-		
-				// 2b) push each value’s bottom bitWidth bits
-				long mask = (1L << bitWidth) - 1;
-				for (int v : block) {
-				  acc = (acc << bitWidth) | (v & mask);
-				  accLen += bitWidth;
-				  // emit top bytes as soon as we have ≥8 bits
-				  while (accLen >= 8) {
-					int shift = accLen - 8;
-					sink.next((int)((acc >> shift) & 0xFF));
-					accLen -= 8;
-					acc &= (1L << accLen) - 1;
-				  }
+				// Accumulate one more value into our current BLOCK_SIZE chunk.
+				block.add(item);
+				if (block.size() == BLOCK_SIZE) {
+					// Compute the bit-width needed to represent every value in this block
+					// by OR bit masking them together and counting how many bits that result needs
+					// because it gives the position of the highest-position 1 in their bitstrings
+					int farthestOne = 0;
+					for (int v : block)
+						farthestOne |= v;
+					// now has 1s in every bit-position that any v had set
+					int bitWidth = 32 - Integer.numberOfLeadingZeros(farthestOne);
+					// Bitstring 0 still has width 1
+					if (bitWidth == 0)
+						bitWidth = 1;
+
+					// Assuming 8-bit input, largest zigzag-encoded value is 510
+					// which has a bitwidth of 9, which can be stored in 4 tsbi
+					int header = (bitWidth) & 0xF;
+
+					// Accumulate the bits from the truncated bitstrings and
+					// concatenate. Whenever an 8-bit (1 byte) chunk is full
+					// send it to the sink as an Integer
+					long bitQueue = header; // Initially we start with just the bitwidth header
+					int currBits = 4; // the length starts off as 3, the length of the header
+
+					// Bitmask extracts the non-truncated bits of each element in the block
+					long truncateMask = (1L << bitWidth) - 1;
+
+					// For each of the BLOCK_SIZE (10) values, concatenate their truncated bits
+					for (int v : block) {
+						// bitshift left by bitWidth, then OR in the new bits:
+						// v & mask gets you the bits you want to send out
+						// then we OR to concatenate
+						bitQueue = (bitQueue << bitWidth) | (v & truncateMask);
+						currBits += bitWidth;
+
+						// Enough bits for a byte, so send it out
+						while (currBits >= 8) {
+							int shift = currBits - 8;
+							// Get the first byte in order
+							sink.next((int) ((bitQueue >> shift) & 0xFF));
+
+							// Remove the sent bits from the length tracker and the bit queue
+							currBits -= 8;
+							bitQueue &= (1L << currBits) - 1;
+						}
+					}
+
+					// Flush leftover bits with padding so the msg is byte-aligned
+					if (currBits > 0) {
+						sink.next((int) ((bitQueue << (8 - currBits)) & 0xFF));
+					}
+					block.clear();
 				}
-		
-				// 2c) flush remaining (pad low bits with 0)
-				if (accLen > 0) {
-				  sink.next((int)((acc << (8 - accLen)) & 0xFF));
-				}
-		
-				block.clear();
-			  }
 			}
-		
+
 			@Override
 			public void end(Sink<Integer> sink) {
-			  // guaranteed multiple of BLOCK_SIZE so nothing extra
-			  sink.end();
+				// INSTRUCTOR ASSUMPTION: input is of length guaranteed multiple of BLOCK_SIZE
+				// Thus, no extra on ending
+				sink.end();
 			}
-		  };
+		};
 	}
 
 	// Query for unpacking: compressed message -> recovers elements that were
@@ -147,60 +163,65 @@ public class Compress {
 	public static Query<Integer, Integer> unpack() {
 		// TODO
 		return new Query<>() {
-			private int bitWidth = 0;
-			private long acc = 0;
-			private int accLen = 0;
-			private int countInBlock = 0;
-		
+			// Unlike pack(), we needed these values to persist across calls to next()
+			// because they need to re-accumulate the compressed bytes to rebuild each block
+			private int bitWidth = 0; // block width
+			private long bitQueue = 0; // bits waiting to be de-compressed
+			private int currBits = 0; // number of total bits in the queue
+			private int countInBlock = 0; // how many of the current block have been decompressed
+
 			@Override
 			public void start(Sink<Integer> sink) {
-			  bitWidth = 0;
-			  acc = 0;
-			  accLen = 0;
-			  countInBlock = 0;
+				bitWidth = 0;
+				bitQueue = 0;
+				currBits = 0;
+				countInBlock = 0;
 			}
-		
+
 			@Override
 			public void next(Integer item, Sink<Integer> sink) {
-			  int b = item & 0xFF;
-			  // 1) append new byte
-			  acc = (acc << 8) | b;
-			  accLen += 8;
-		
-			  // 2) if we don't yet know bitWidth, read 3 header bits
-			  if (bitWidth == 0) {
-				if (accLen < 3) return;        // need more bytes
-				int header = (int)((acc >> (accLen - 3)) & 0x7);
-				bitWidth = header + 1;
-				accLen -= 3;
-				acc &= (1L << accLen) - 1;
-			  }
-		
-			  // 3) now extract exactly BLOCK_SIZE values
-			  while (countInBlock < BLOCK_SIZE && accLen >= bitWidth) {
-				int shift = accLen - bitWidth;
-				int v = (int)((acc >> shift) & ((1 << bitWidth) - 1));
-				sink.next(v);
-				accLen -= bitWidth;
-				acc &= (1L << accLen) - 1;
-				countInBlock++;
-			  }
-		
-			  // 4) once we hit BLOCK_SIZE, reset for next header
-			  if (countInBlock == BLOCK_SIZE) {
-				bitWidth = 0;
-				countInBlock = 0;
-				// need to flush the accumulator:
-				acc = 0;
-				accLen = 0;
-			  }
+				// Add new byte to bitQeuue
+				int b = item & 0xFF;
+				bitQueue = (bitQueue << 8) | b;
+				currBits += 8;
+
+				// If no header yet (0 is impossible in this scheme), consume 4 bits
+				if (bitWidth == 0) {
+					if (currBits < 4) {
+						return;
+					}
+					int header = (int) ((bitQueue >> (currBits - 4)) & 0xF);
+					bitWidth = header;
+					currBits -= 4;
+					bitQueue &= (1L << currBits) - 1;
+				}
+
+				// Extract BLOCK_SIZE * bitWidth bits
+				while (countInBlock < BLOCK_SIZE && currBits >= bitWidth) {
+					int shift = currBits - bitWidth;
+					int v = (int) ((bitQueue >> shift) & ((1 << bitWidth) - 1));
+					sink.next(v); // Value is decompressed, send off
+					currBits -= bitWidth;
+					bitQueue &= (1L << currBits) - 1;
+					countInBlock++;
+				}
+
+				// Reset for next block
+				if (countInBlock == BLOCK_SIZE) {
+					bitWidth = 0;
+					countInBlock = 0;
+					bitQueue = 0;
+					currBits = 0;
+				}
 			}
-		
+
 			@Override
 			public void end(Sink<Integer> sink) {
-			  sink.end();
+				// INSTRUCTOR ASSUMPTION: input is of length guaranteed multiple of BLOCK_SIZE
+				// Thus, no extra on ending
+				sink.end();
 			}
-		  };
+		};
 	}
 
 	// Query for compression
